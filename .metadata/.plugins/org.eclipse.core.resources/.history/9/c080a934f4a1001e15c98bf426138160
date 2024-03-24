@@ -1,0 +1,82 @@
+package humanitarna_pomoc;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.net.UnknownHostException;
+
+public class Klijent implements Runnable {
+	
+	public static Socket komunikacijskiSocket = null;
+	public static BufferedReader ulazSaKonzole = null;
+	public static BufferedReader ulazniTokSaServera = null;
+	public static PrintStream izlazniTokKaServeru = null;
+	public static int port = 7001;
+	
+	public void sacuvajUplatnicu(String nazivFajla) {
+		try (PrintWriter writer = new PrintWriter(nazivFajla)) {
+            String line;
+            while ((line = ulazniTokSaServera.readLine()) != null) {
+                // Čitanje linija teksta od servera i upisivanje u lokalni fajl
+                writer.println(line);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+	}
+
+	public static void main(String[] args) {
+		try {
+			komunikacijskiSocket = new Socket("localhost",port);
+			ulazSaKonzole = new BufferedReader(new InputStreamReader(System.in));
+			ulazniTokSaServera = new BufferedReader(new InputStreamReader(komunikacijskiSocket.getInputStream()));
+			izlazniTokKaServeru = new PrintStream(komunikacijskiSocket.getOutputStream());
+			
+			String input;
+			new Thread(new Klijent()).start();
+			while(true) {
+				input = ulazSaKonzole.readLine();
+				izlazniTokKaServeru.println(input);
+				if(input.equals("*QUIT*")) {
+					break;
+				}
+			}
+			
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	@Override
+	public void run() {
+		String poruka;
+		try {
+			while(true) {
+				poruka = ulazniTokSaServera.readLine();
+				System.out.println(poruka);
+				
+				if (poruka.contains("#")) {
+					sacuvajUplatnicu(poruka.substring(1));
+				}
+				
+				if(poruka.equals("Dovidjenja")) {
+					break;
+				}
+				
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+
+}

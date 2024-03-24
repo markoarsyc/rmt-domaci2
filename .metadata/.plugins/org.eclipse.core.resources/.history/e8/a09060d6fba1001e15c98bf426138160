@@ -1,0 +1,39 @@
+package humanitarna_pomoc;
+
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.util.ArrayList;
+
+
+public class Server {
+	
+	public static int port = 7001;
+	public static ArrayList<KlijentskeNiti> onlineKlijenti = new ArrayList<>();
+
+	public static void main(String[] args) {
+		//inicijalizujemo server  i klijent socket
+		ServerSocket serverskiSocket = null;
+		Socket klijentskiSocket = null;
+		
+		try {
+			serverskiSocket = new ServerSocket(port);
+			System.out.println("Server radi na portu " + port + " i ceka na konekciju");
+			System.out.println("Broj povezanih korisnika: " + onlineKlijenti.size());
+			while(true) {
+				klijentskiSocket = serverskiSocket.accept();
+				System.out.println("Uspesno uspostavljena konekcija");
+				KlijentskeNiti klijentskaNit = new KlijentskeNiti(klijentskiSocket);
+				klijentskaNit.start();
+				onlineKlijenti.add(klijentskaNit);
+				System.out.println("Broj povezanih korisnika: " + onlineKlijenti.size());
+				
+			}
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+}

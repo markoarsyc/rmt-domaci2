@@ -1,0 +1,36 @@
+package humanitarna_pomoc;
+
+import java.io.Serializable;
+import java.util.Objects;
+
+public class PlatnaKartica implements Serializable {
+	
+	private static final long serialVersionUID = 1L;
+	public String broj = null;
+	public String CVV = null;
+	
+	public PlatnaKartica(String broj, String CVV) {
+		this.broj = broj;
+		this.CVV = CVV;
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (obj == null)
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		PlatnaKartica other = (PlatnaKartica) obj;
+		return Objects.equals(CVV, other.CVV) && Objects.equals(broj, other.broj);
+	}
+
+	@Override
+	public String toString() {
+		return "Broj kartice: " + broj + ", CVV: " + CVV + '\n';
+	}
+	
+	
+
+}

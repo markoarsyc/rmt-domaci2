@@ -1,0 +1,15 @@
+package humanitarna_pomoc;
+
+public class RegistrovaniKorisnik {
+
+	private String username;
+	private String password;
+	private String ime;
+	private String prezime;
+	private String jmbg;
+	private PlatnaKartica kartica;
+	
+	
+	
+	
+}

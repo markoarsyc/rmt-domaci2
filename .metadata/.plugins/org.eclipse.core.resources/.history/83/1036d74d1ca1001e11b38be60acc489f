@@ -1,0 +1,100 @@
+package humanitarna_pomoc;
+
+import java.io.Serializable;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+
+public class Uplatnica implements Serializable {
+	private static final long serialVersionUID = 1L;
+	private String ime;
+	private String prezime;
+	private String adresa;
+//	private PlatnaKartica kartica;
+	private int iznos;
+	int godina;
+	int mesec;
+	int dan;
+	int sati;
+	int minuti;
+	int sekunde;
+
+	public Uplatnica(String ime, String prezime, String adresa, PlatnaKartica kartica, int iznos) {
+		GregorianCalendar datum = new GregorianCalendar();
+		int godina = datum.get(Calendar.YEAR);
+		int mesec = datum.get(Calendar.MONTH) + 1;
+		int dan = datum.get(Calendar.DAY_OF_MONTH);
+		int sati = datum.get(Calendar.HOUR_OF_DAY);
+		int minuti = datum.get(Calendar.MINUTE);
+		int sekunde = datum.get(Calendar.SECOND);
+		this.ime = ime;
+		this.prezime = prezime;
+		this.adresa = adresa;
+		this.kartica = kartica;
+		this.iznos = iznos;
+		this.godina = godina;
+		this.mesec = mesec;
+		this.dan = dan;
+		this.sati = sati;
+		this.minuti = minuti;
+		this.sekunde = sekunde;
+	}
+
+	public String getIme() {
+		return ime;
+	}
+
+	public void setIme(String ime) {
+		this.ime = ime;
+	}
+
+	public String getPrezime() {
+		return prezime;
+	}
+
+	public void setPrezime(String prezime) {
+		this.prezime = prezime;
+	}
+
+	public String getAdresa() {
+		return adresa;
+	}
+
+	public void setAdresa(String adresa) {
+		this.adresa = adresa;
+	}
+
+	public int getIznos() {
+		return iznos;
+	}
+
+	public void setIznos(int iznos) {
+		this.iznos = iznos;
+	}
+
+	public PlatnaKartica getKartica() {
+		return kartica;
+	}
+
+	public void setKartica(PlatnaKartica kartica) {
+		this.kartica = kartica;
+	}
+
+	@Override
+	public String toString() {
+		String tekst = "Ime: " + ime + '\n' + "Prezime: " + prezime + '\n' + "Adresa: " + adresa + '\n'
+				+ kartica.toString() + "Iznos: " + iznos + '\n';
+//		String tekst = "Ime: " + ime + '\n' + "Prezime: " + prezime + '\n' + "Adresa: " + adresa + '\n'
+//				 + "Iznos: " + iznos + '\n';
+		String datum = "Datum: " + dan + '.' + mesec + '.' + godina + '.' + '\n';
+		String vreme = "Vreme: " + sati + ':' + minuti + ":" + sekunde;
+		return tekst + datum + vreme;
+	}
+
+
+	public static void main(String[] args) {
+		Uplatnica uplatnica = new Uplatnica("Aleksa", "Arsic", "Vojvode Stepe 123", new PlatnaKartica("sadhsudha", "sdadsa"),
+				300);
+		System.out.println(uplatnica);
+	}
+
+}

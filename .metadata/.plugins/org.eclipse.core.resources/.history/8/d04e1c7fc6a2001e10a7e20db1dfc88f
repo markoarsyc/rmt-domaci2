@@ -1,0 +1,564 @@
+package humanitarna_pomoc;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.EOFException;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.PrintStream;
+import java.net.Socket;
+import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class KlijentskeNiti extends Thread {
+
+	public Socket komunikacijskiSocket = null;
+	public BufferedReader ulazniTokOdKlijenta = null;
+	public PrintStream izlazniTokKaKlijentu = null;
+	public String username = null;
+	public ArrayList<PlatnaKartica> platneKartice = new ArrayList<PlatnaKartica>();
+	public ArrayList<Uplatnica> uplate = new ArrayList<Uplatnica>();
+	public ArrayList<RegistrovaniKorisnik> registrovaniKorisnici = new ArrayList<RegistrovaniKorisnik>();
+	public RegistrovaniKorisnik prijavljeniKorisnik;
+
+	public KlijentskeNiti(Socket klijentSocket) {
+		komunikacijskiSocket = klijentSocket;
+	}
+
+	// funkcije
+
+	public void ucitajPlatneKartice(String putanja) throws FileNotFoundException {
+		try (BufferedReader reader = new BufferedReader(new FileReader(putanja))) {
+			String broj, CVV;
+			PlatnaKartica kartica;
+			try (Scanner scanner = new Scanner(reader)) {
+				while (scanner.hasNextLine()) {
+					broj = scanner.nextLine();
+					CVV = scanner.nextLine();
+
+					kartica = new PlatnaKartica(broj, CVV);
+					platneKartice.add(kartica);
+				}
+			}
+		} catch (FileNotFoundException e) {
+			throw e;
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+	public ArrayList<RegistrovaniKorisnik> ucitajSveKorisnike(String nazivFajla) {
+		ArrayList<RegistrovaniKorisnik> prethodnoUcitaniKorisnici = new ArrayList<>();
+		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(nazivFajla))) {
+			while (true) {
+				RegistrovaniKorisnik korisnik = (RegistrovaniKorisnik) ois.readObject();
+				prethodnoUcitaniKorisnici.add(korisnik);
+			}
+		} catch (EOFException e) {
+
+		} catch (IOException | ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+		return prethodnoUcitaniKorisnici;
+	}
+
+	public void upisiKorisnikaDat(RegistrovaniKorisnik korisnik, String nazivFajla) {
+		// Prvo pročitaj postojeće korisnike
+		ArrayList<RegistrovaniKorisnik> postojeciKorinici = ucitajSveKorisnike(nazivFajla);
+
+		// Dodaj novog korisnika
+		postojeciKorinici.add(korisnik);
+
+		// Upisivanje svih korisnika u datoteku
+		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(nazivFajla))) {
+			for (RegistrovaniKorisnik postojeciKorisnik : postojeciKorinici) {
+				oos.writeObject(postojeciKorisnik);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.out.println("GRESKA PRILIKOM UPISIVANJA OBJEKTA");
+		}
+	}
+
+	public void ucitajKorisnikeIzDatFajla(String nazivFajla) {
+		try (FileInputStream fis = new FileInputStream(nazivFajla);
+				BufferedInputStream bis = new BufferedInputStream(fis);
+				ObjectInputStream ois = new ObjectInputStream(bis)) {
+
+			registrovaniKorisnici.clear();
+			try {
+				while (true) {
+					RegistrovaniKorisnik korisnik = (RegistrovaniKorisnik) ois.readObject();
+					registrovaniKorisnici.add(korisnik);
+				}
+			} catch (EOFException e) {
+				// Završetak datoteke, nema greške
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.out.println("GRESKA PRILIKOM UCITAVANJA KORISNIKA");
+		}
+	}
+
+	public void registracija() throws IOException {
+		RegistrovaniKorisnik noviKorisnik;
+		String ime, prezime, jmbg, brojPlatneKartice, CVV, username, password;
+		PlatnaKartica kartica;
+		boolean flag = true;
+		izlazniTokKaKlijentu.println("Molimo Vas da popunite sledece podatke:");
+		do {
+			flag = true;
+			izlazniTokKaKlijentu.println("Unesite Vase ime:");
+			ime = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite Vase prezime:");
+			prezime = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite JMBG:");
+			jmbg = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite broj kartice (xxxx-xxxx-xxxx-xxxx)");
+			brojPlatneKartice = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unestie trocifreni CVV broj:");
+			CVV = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite username:");
+			username = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite lozinku");
+			password = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("****************************************************");
+
+			if (CVV.length() < 3 && !CVV.matches("\\d+")) {
+				flag = false;
+				izlazniTokKaKlijentu.println("CVV mora biti trocifreni broj");
+			}
+
+			if (!proveriFormatKartice(brojPlatneKartice)) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Broj kartice mora biti u formatu xxxx-xxxx-xxxx-xxxx");
+			}
+
+			kartica = new PlatnaKartica(brojPlatneKartice, CVV);
+			ucitajPlatneKartice("platneKartice/kartice.txt");
+
+			if (!platneKartice.contains(kartica)) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Kartica nije validna");
+			}
+
+			if (password.length() < 8) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Lozinka mora da sadrzi barem 8 karaktera");
+			}
+			
+			if (jmbg.length() != 13 || !jmbg.matches("\\d+")) {
+				flag = false;
+				izlazniTokKaKlijentu.println("JMBG mora da sadrzi 13 cifara");
+			}
+
+			ucitajKorisnikeIzDatFajla("registrovaniKorisnici.dat");
+			for (RegistrovaniKorisnik korisnik : registrovaniKorisnici) {
+				if (korisnik != null && korisnik.getUsername().equals(username)) {
+					flag = false;
+					izlazniTokKaKlijentu.println("Korisnicko ime je zauzeto, molimo Vas probajte drugo");
+					break;
+				}
+			}
+
+		} while (!flag);
+		noviKorisnik = new RegistrovaniKorisnik(username, password, ime, prezime, jmbg, kartica);
+		upisiKorisnikaDat(noviKorisnik, "registrovaniKorisnici.dat");
+		izlazniTokKaKlijentu.println("Uspesno ste se registrovali");
+		izlazniTokKaKlijentu.println("****************************************************");
+		System.out.println("Novi korisnik <" + noviKorisnik.getUsername() + "> se upravo registrovao");
+	}
+
+	public void prijava() throws IOException {
+		String username, password;
+		izlazniTokKaKlijentu.println("Molimo Vas da popunite sledece podatke:");
+		boolean postoji;
+		do {
+			izlazniTokKaKlijentu.println("Unesite username:");
+			username = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite lozinku");
+			password = ulazniTokOdKlijenta.readLine();
+
+			postoji = false;
+			ucitajKorisnikeIzDatFajla("registrovaniKorisnici.dat");
+			for (RegistrovaniKorisnik korisnik : registrovaniKorisnici) {
+				if (korisnik.getUsername().equals(username) && korisnik.getPassword().equals(password)) {
+					System.out.println("Korisnik " + korisnik.getUsername() + " se prijavio!");
+					izlazniTokKaKlijentu.println("Uspesno ste se prijavili");
+					izlazniTokKaKlijentu.println("****************************************************");
+					postoji = true;
+					prijavljeniKorisnik = korisnik;
+					return;
+				}
+			}
+			izlazniTokKaKlijentu.println("Ne postoji korisnik sa ovakvim korisnickim imenom i lozinkom");
+			izlazniTokKaKlijentu.println("Pokusajte ponovo");
+			izlazniTokKaKlijentu.println("****************************************************");
+		} while (!postoji);
+
+	}
+
+	public String registracijaIliPrijava() throws IOException {
+		String opcija;
+		do {
+			izlazniTokKaKlijentu.println("Odaberite opciju:");
+			izlazniTokKaKlijentu.println("Za izlaz unesite: *QUIT*");
+			izlazniTokKaKlijentu.println("1. prijava");
+			izlazniTokKaKlijentu.println("2. registracija");
+			izlazniTokKaKlijentu.println("3. nastavite bez prijave ili registracije");
+			izlazniTokKaKlijentu.println("****************************************************");
+			opcija = ulazniTokOdKlijenta.readLine();
+			if (opcija.equals("*QUIT*")) {
+				izlazniTokKaKlijentu.println("Dovidjenja");
+				break;
+			}
+			if (opcija.equals("1")) {
+				prijava();
+				break;
+			} else if (opcija.equals("2")) {
+				registracija();
+				break;
+			} else if (opcija.equals("3")) {
+				break;
+			} else {
+				izlazniTokKaKlijentu.println("Molimo Vas, odaberite validnu opciju");
+				izlazniTokKaKlijentu.println("****************************************************");
+			}
+		} while (!opcija.equals("*QUIT*"));
+
+		return opcija;
+
+	}
+
+	public void odabirOpcijeNeprijavljeni() throws IOException {
+		String opcija;
+		do {
+			izlazniTokKaKlijentu.println("Dobrodosli u aplikaciju za uplatu humanitarne pomoci");
+			izlazniTokKaKlijentu.println("Molimo Vas odaberite neku od ponudjenih opcija");
+			izlazniTokKaKlijentu.println("Za izlaz unesite: *QUIT*");
+			izlazniTokKaKlijentu.println("1. uplata humanitarne pomoci");
+			izlazniTokKaKlijentu.println("2. provera ukupno uplacenog novca");
+			izlazniTokKaKlijentu.println("****************************************************");
+			opcija = ulazniTokOdKlijenta.readLine();
+			switch(opcija) {
+			case "1":
+				izvrsiUplatuNeprijavljeni();
+				break;
+			case "2":
+				ucitajUplatniceIzDatFajla("uplate.dat");
+				izlazniTokKaKlijentu.println("Ukupna uplacena suma novca je:" + izracunajUkupneUplate());
+				izlazniTokKaKlijentu.println("****************************************************");
+				break;
+			case "*QUIT*":
+				izlazniTokKaKlijentu.println("Dovidjenja");
+				break;
+			default:
+				izlazniTokKaKlijentu.println("Molimo Vas, odaberite validnu opciju");
+				izlazniTokKaKlijentu.println("****************************************************");
+			}
+
+		} while (!opcija.equals("*QUIT*"));
+
+	}
+
+	public void odabirOpcijePrijavljeni() throws IOException {
+		String opcija;
+		do {
+			izlazniTokKaKlijentu.println("Dobrodosli " + prijavljeniKorisnik.getUsername());
+			izlazniTokKaKlijentu.println("Molimo Vas odaberite neku od ponudjenih opcija");
+			izlazniTokKaKlijentu.println("Za izlaz unesite: *QUIT*");
+			izlazniTokKaKlijentu.println("1. uplata humanitarne pomoci");
+			izlazniTokKaKlijentu.println("2. provera ukupno uplacenog novca");
+			izlazniTokKaKlijentu.println("3. provera poslednjih 10 uplata");
+			izlazniTokKaKlijentu.println("****************************************************");
+			opcija = ulazniTokOdKlijenta.readLine();			
+			switch(opcija) {
+			case "1":
+				izvrsiUplatuPrijavljeni();
+				break;
+			case "2":
+				ucitajUplatniceIzDatFajla("uplate.dat");
+				izlazniTokKaKlijentu.println("Ukupna uplacena suma novca je:" + izracunajUkupneUplate());
+				izlazniTokKaKlijentu.println("****************************************************");
+				break;
+			case "3":
+				prikaziPoslednjih10Uplata();
+				break;
+			case "*QUIT*":
+				izlazniTokKaKlijentu.println("Dovidjenja");
+				break;
+			default:
+				izlazniTokKaKlijentu.println("Molimo Vas, odaberite validnu opciju");
+				izlazniTokKaKlijentu.println("****************************************************");
+			}
+
+		} while (!opcija.equals("*QUIT*"));
+	}
+
+	public boolean proveriFormatKartice(String kartica) {
+		String regex = "\\d{4}-\\d{4}-\\d{4}-\\d{4}";
+		Pattern pattern = Pattern.compile(regex);
+		Matcher matcher = pattern.matcher(kartica);
+		return matcher.matches();
+	}
+
+	public void upisiUplatu(Uplatnica uplatnica) {
+		String nazivFajla = uplatnica.getIme() + uplatnica.getPrezime() + uplatnica.godina + "" + uplatnica.mesec + ""
+				+ uplatnica.dan + "" + uplatnica.sati + "" + uplatnica.minuti + "" + uplatnica.sekunde;
+		try (FileWriter writer = new FileWriter("uplate/" + nazivFajla + ".txt")) {
+			writer.write(uplatnica.toString());
+		} catch (IOException e) {
+			System.err.println("Neuspesan upis u fajl");
+		}
+	}
+	
+	public void posaljiUplatnicuKlijentu(Uplatnica uplatnica) {
+		String nazivFajla = uplatnica.getIme() + uplatnica.getPrezime() + uplatnica.godina + "" + uplatnica.mesec + ""
+				+ uplatnica.dan + "" + uplatnica.sati + "" + uplatnica.minuti + "" + uplatnica.sekunde;
+		try (BufferedReader bufferedReader = new BufferedReader(new FileReader("uplate/" + nazivFajla + ".txt"))) {
+            String line;
+            izlazniTokKaKlijentu.println("Potvrda uplate je preuzeta na Vas lokalni racunar");
+            izlazniTokKaKlijentu.println("#" + nazivFajla + ".txt");
+            while ((line = bufferedReader.readLine()) != null) {
+                // Slanje linije teksta klijentu
+                izlazniTokKaKlijentu.println(line);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+	}
+
+	public ArrayList<Uplatnica> ucitajSveUplatnice(String nazivFajla) {
+		ArrayList<Uplatnica> uplatnice = new ArrayList<>();
+		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(nazivFajla))) {
+			while (true) {
+				Uplatnica uplatnica = (Uplatnica) ois.readObject();
+				uplatnice.add(uplatnica);
+			}
+		} catch (EOFException e) {
+
+		} catch (IOException | ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+		return uplatnice;
+	}
+
+	public void upisiUplatnicuDat(Uplatnica uplatnica, String nazivFajla) {
+		// Prvo pročitaj postojeće uplatnice
+		ArrayList<Uplatnica> postojeceUplatnice = ucitajSveUplatnice(nazivFajla);
+
+		// Dodaj novu uplatnicu
+		postojeceUplatnice.add(uplatnica);
+
+		// Upisivanje svih uplatnica u datoteku
+		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(nazivFajla))) {
+			for (Uplatnica postojucaUplatnica : postojeceUplatnice) {
+				oos.writeObject(postojucaUplatnica);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.out.println("GRESKA PRILIKOM UPISIVANJA OBJEKTA");
+		}
+	}
+
+	public void ucitajUplatniceIzDatFajla(String nazivFajla) {
+		try (FileInputStream fis = new FileInputStream(nazivFajla);
+				BufferedInputStream bis = new BufferedInputStream(fis);
+				ObjectInputStream ois = new ObjectInputStream(bis)) {
+
+			uplate.clear();
+			try {
+				while (true) {
+					Uplatnica uplatnica = (Uplatnica) ois.readObject();
+					uplate.add(uplatnica);
+				}
+			} catch (EOFException e) {
+				// Završetak datoteke, nema greške
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			System.out.println("GRESKA PRILIKOM UCITAVANJA OBJEKTA");
+		}
+	}
+
+	public int izracunajUkupneUplate() {
+		int iznos = 0;
+		for (Uplatnica uplata : uplate) {
+			iznos += uplata.getIznos();
+		}
+		return iznos;
+	}
+
+	public void izvrsiUplatuNeprijavljeni() throws IOException {
+		String ime, prezime, adresa, brojPlatneKartice, CVV;
+		int iznos;
+		PlatnaKartica kartica;
+		boolean flag = true;
+		izlazniTokKaKlijentu.println("Molimo Vas da popunite sledece podatke:");
+		do {
+			flag = true;
+			izlazniTokKaKlijentu.println("Unesite Vase ime:");
+			ime = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite Vase prezime:");
+			prezime = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite Vasu adresu:");
+			adresa = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite broj kartice (xxxx-xxxx-xxxx-xxxx)");
+			brojPlatneKartice = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unestie trocifreni CVV broj:");
+			CVV = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite iznos za uplatu (u dinarima):");
+			iznos = Integer.parseInt(ulazniTokOdKlijenta.readLine());
+
+			// ogranicenja
+			if (iznos < 200) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Iznos mora biti veci od 200 dinara!");
+			}
+
+			if (CVV.length() < 3 || !CVV.matches("\\d+")) {
+				flag = false;
+				izlazniTokKaKlijentu.println("CVV mora biti trocifreni broj");
+			}
+
+			if (!proveriFormatKartice(brojPlatneKartice)) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Broj kartice mora biti u formatu xxxx-xxxx-xxxx-xxxx");
+			}
+
+			kartica = new PlatnaKartica(brojPlatneKartice, CVV);
+			ucitajPlatneKartice("platneKartice/kartice.txt");
+
+			if (!platneKartice.contains(kartica)) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Kartica nije validna");
+			}
+
+		} while (!flag);
+
+		Uplatnica uplatnica = new Uplatnica(ime, prezime, adresa, kartica, iznos);
+
+		upisiUplatu(uplatnica);
+		upisiUplatnicuDat(uplatnica, "uplate.dat");
+
+		izlazniTokKaKlijentu.println("Uspesno ste izvrsili uplatu od " + iznos + " dinara");
+		posaljiUplatnicuKlijentu(uplatnica);
+		izlazniTokKaKlijentu.println("****************************************************");
+
+	}
+
+	public void izvrsiUplatuPrijavljeni() throws IOException {
+		String ime = prijavljeniKorisnik.getIme();
+		String prezime = prijavljeniKorisnik.getPrezime();
+		PlatnaKartica kartica = prijavljeniKorisnik.getKartica();
+		String adresa, CVV;
+		int iznos;
+		boolean flag = true;
+		do {
+			flag = true;
+			izlazniTokKaKlijentu.println("Postovani/a " + ime + " " + prezime + " molimo Vas unesite Vasu adresu:");
+			adresa = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite trocifreni CVV kod sa Vase kartice:");
+			CVV = ulazniTokOdKlijenta.readLine();
+			izlazniTokKaKlijentu.println("Unesite iznos za uplatu (u dinarima):");
+			iznos = Integer.parseInt(ulazniTokOdKlijenta.readLine());
+
+			if (iznos < 200) {
+				flag = false;
+				izlazniTokKaKlijentu.println("Iznos mora biti veci od 200 dinara!");
+			}
+
+			if (CVV.length() < 3 || !CVV.matches("\\d+")) {
+				flag = false;
+				izlazniTokKaKlijentu.println("CVV mora biti trocifreni broj");
+			}
+			
+			if (!kartica.CVV.equals(CVV)) {
+				flag = false;
+				izlazniTokKaKlijentu.println("CVV kod koji ste uneli, ne poklapa se sa onim na Vasoj kartici");
+			}
+			
+		} while (!flag);
+		
+		Uplatnica uplatnica = new Uplatnica(ime, prezime, adresa, kartica, iznos);
+		upisiUplatu(uplatnica);
+		upisiUplatnicuDat(uplatnica, "uplate.dat");
+
+		izlazniTokKaKlijentu.println("Uspesno ste izvrsili uplatu od " + iznos + " dinara");
+		posaljiUplatnicuKlijentu(uplatnica);
+		izlazniTokKaKlijentu.println("****************************************************");
+
+	}
+
+	public void prikaziPoslednjih10Uplata() {
+		int brojac = 0;
+		ucitajUplatniceIzDatFajla("uplate.dat");
+		for (int i = uplate.size() - 1; i >= 0; i--) {
+            Uplatnica uplatnica = uplate.get(i);
+            brojac++;
+            izlazniTokKaKlijentu.println("Uplata " + brojac);
+            izlazniTokKaKlijentu.println(uplatnica);
+            izlazniTokKaKlijentu.println("---------------------------------------------------");
+            if (brojac == 10) {
+            	break;
+            }
+        }
+	}
+	
+	@Override
+	public void run() {
+		try {
+			ulazniTokOdKlijenta = new BufferedReader(new InputStreamReader(komunikacijskiSocket.getInputStream()));
+			izlazniTokKaKlijentu = new PrintStream(komunikacijskiSocket.getOutputStream());
+
+			izlazniTokKaKlijentu.println("Dobrodosli u aplikaciju za uplatu humanitarne pomoci");
+			izlazniTokKaKlijentu.println("Prijavite se, ili registrujte ukoliko nemate nalog");
+			izlazniTokKaKlijentu.println("****************************************************");
+
+			String pristup = registracijaIliPrijava();
+			switch (pristup) {
+			case "1":
+				odabirOpcijePrijavljeni();
+				break;
+			case "2":
+				izlazniTokKaKlijentu.println("Molimo Vas, prijavite se na Vas nalog");
+				izlazniTokKaKlijentu.println("****************************************************");
+				prijava();
+				odabirOpcijePrijavljeni();
+				break;
+			case "3":
+				odabirOpcijeNeprijavljeni();
+				break;
+			case "*QUIT*":
+				break;
+			}
+			System.out.println("Klijent je diskonektovan");
+			Server.onlineKlijenti.remove(this);
+			System.out.println("Broj povezanih korisnika: " + Server.onlineKlijenti.size());
+
+		} catch (IOException e) {
+			if (e instanceof SocketException && e.getMessage().equals("Connection reset")) {
+		        System.out.println("Klijent je diskonektovan");
+		        Server.onlineKlijenti.remove(this);
+				System.out.println("Broj povezanih korisnika: " + Server.onlineKlijenti.size());
+		    } else {
+		        e.printStackTrace();
+		    }
+		}
+
+	}
+
+}

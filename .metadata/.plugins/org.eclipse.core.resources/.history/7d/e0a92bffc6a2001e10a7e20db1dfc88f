@@ -1,0 +1,108 @@
+package humanitarna_pomoc;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.UnknownHostException;
+
+public class Klijent implements Runnable {
+
+	public static Socket komunikacijskiSocket = null;
+	public static BufferedReader ulazSaKonzole = null;
+	public static BufferedReader ulazniTokSaServera = null;
+	public static PrintStream izlazniTokKaServeru = null;
+	public static int port = 7001;
+
+	public void sacuvajUplatnicu(String nazivFajla, String ime, String prezime, String adresa, String kartica,
+			String iznos, String datum, String vreme) {
+		try (PrintWriter writer = new PrintWriter(nazivFajla.substring(1))) {
+			writer.append(ime + '\n');
+			writer.append(prezime + '\n');
+			writer.append(adresa + '\n');
+			writer.append(kartica + '\n');
+			writer.append(datum + '\n');
+			writer.append(vreme + '\n');
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static void main(String[] args) {
+		try {
+			komunikacijskiSocket = new Socket("localhost", port);
+			ulazSaKonzole = new BufferedReader(new InputStreamReader(System.in));
+			ulazniTokSaServera = new BufferedReader(new InputStreamReader(komunikacijskiSocket.getInputStream()));
+			izlazniTokKaServeru = new PrintStream(komunikacijskiSocket.getOutputStream());
+
+			String input;
+			new Thread(new Klijent()).start();
+			while (true) {
+				input = ulazSaKonzole.readLine();
+				izlazniTokKaServeru.println(input);
+				if (input.equals("*QUIT*")) {
+					break;
+				}
+			}
+
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+
+	@Override
+	public void run() {
+		String poruka;
+		try {
+			while (true) {
+				poruka = ulazniTokSaServera.readLine();
+				System.out.println(poruka);
+
+				if (poruka.contains("#")) {
+					String ime = ulazniTokSaServera.readLine();
+					String prezime = ulazniTokSaServera.readLine();
+					String adresa = ulazniTokSaServera.readLine();
+					String kartica = ulazniTokSaServera.readLine();
+					String iznos = ulazniTokSaServera.readLine();
+					String datum = ulazniTokSaServera.readLine();
+					String vreme = ulazniTokSaServera.readLine();
+
+					sacuvajUplatnicu(poruka, ime, prezime, adresa, kartica, iznos, datum, vreme);
+				}
+
+				if (poruka.equals("Dovidjenja")) {
+					break;
+				}
+
+			}
+		} catch (SocketException e) {
+			// Uhvaćen SocketException - server je ugašen
+			System.out.println("Server je ugašen. Aplikacija će se sada zatvoriti");
+			System.exit(0);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} finally {
+			// Zatvaranje resursa i prekid veze
+			try {
+				if (ulazniTokSaServera != null)
+					ulazniTokSaServera.close();
+				if (izlazniTokKaServeru != null)
+					izlazniTokKaServeru.close();
+				if (komunikacijskiSocket != null && !komunikacijskiSocket.isClosed())
+					komunikacijskiSocket.close();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+}
